@@ -1,4 +1,5 @@
 """Aplicación Flask que expone una calculadora web simple."""
+
 from flask import Flask, render_template, request
 from .calculadora import sumar, restar, multiplicar, dividir
 
