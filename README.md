@@ -1,76 +1,48 @@
-# entregable-2-cicd
+¿Qué ventajas le proporciona a un proyecto el uso de un pipeline de CI? Menciona al menos tres ventajas específicas y explica por qué son importantes.
 
-Aplicación Flask (calculadora web simple) con un pipeline de CI/CD en GitHub Actions que corre linters, pruebas unitarias y de aceptación, análisis de calidad en SonarQube, y finalmente construye y publica la imagen Docker.
+1. Versionamiento automático de artefactos: Al versionar nuestros artefactos (e.g., imágenes de Docker), logramos tener un control granular sobre lo que tenemos en producción. Haciendo que deploys y, si es necesario, rollbacks sean fáciles y seguros.  
 
----
+2. Automatización de pruebas: El CI también nos permite automatizar pruebas a nuestro código, asegurando que todo funcione de manera correcta fuera de nuestra máquina y además podamos asegurar que nuevas features que desarrollemos no dañen cosas que previamente estaban implementadas.
 
-## 1. Ventajas de usar un pipeline de CI
+3.  Aumentar la seguridad, mantenibilidad y calidad de nuestro código: Aparte de las pruebas, también podemos implementar escáneres de seguridad como SonarQube para el código y Trivy para la imagen Docker, así como analizadores estáticos de código como ESLint y Flake8. Herramientas que nos ayudarán a mantener nuestro código limpio y seguro. Lo cual a largo plazo es una gran victoria.
 
-Después de varios semestres entregando proyectos "a mano" (subir un zip, compilar en la máquina del profesor, rezar), tener un pipeline de CI cambia bastante la dinámica. Las tres ventajas que más me han servido en este taller son:
+¿Cuál es la diferencia principal entre una prueba unitaria y una prueba de aceptación? Da un ejemplo de algo que probarías con una prueba unitaria y algo que verificarías con una prueba de aceptación (en el contexto de cualquier aplicación que conozcas, descríbela primero).
 
-1. **Detección temprana de errores.** Cada vez que hago `push` a `main` o abro un PR, el pipeline corre los linters (Black, Pylint, Flake8) y las pruebas. Esto significa que un error de formato, un import mal puesto o un test roto se detectan en minutos, no cuando el profesor intenta correr el proyecto. Es importante porque el costo de arreglar un bug crece mucho mientras más tarde se descubre.
+- La diferencia es que las pruebas unitarias se encargan de probar funciones o pedazos aislados de lógica de negocio que componen todo el flujo en general de la aplicación. Mientras que las pruebas de aceptación son de cara al usuario, enfocándose en ver que la lógica de negocio esté entregando el valor esperado. Por ejemplo, en nuestra calculadora, una prueba unitaria se encarga de probar la función individual de la multiplicación y una prueba de aceptación prueba toda la lógica de negocio enfocada en la acción de multiplicar, levantando un browser (headless), haciendo peticiones y asegurándose de que la respuesta de nuestro servicio sea la esperada.
 
-2. **Reproducibilidad y entorno consistente.** El workflow siempre corre sobre `ubuntu-latest` con Python 3.12 fijo e instala dependencias desde `requirements.txt`. Evita el clásico "en mi máquina sí funciona": si pasa en el runner, va a pasar en el de cualquiera. Es clave cuando se trabaja en equipo o cuando alguien revisa tu código semanas después.
+Describe brevemente qué hace cada uno de los steps principales de tu workflow de GitHub Actions (desde el checkout hasta el push de Docker). Explica el propósito de cada uno (qué hace y para qué se hace).
 
-3. **Automatización del flujo de entrega.** Una vez que las pruebas pasan, el pipeline construye la imagen Docker y la publica en Docker Hub sin intervención manual. No hay pasos que se me olviden ni comandos que se me escapen. Esto libera tiempo para concentrarme en programar y reduce muchísimo la probabilidad de un error humano en el despliegue.
+- Checkout: Se encarga de hacer checkout al código de nuestro repositorio, cargándolo en memoria y dejándolo listo para compilar.
 
----
+- Set up Python: Instalar Python para poder correr nuestro proyecto en nuestra máquina virtual.
 
-## 2. Diferencia entre prueba unitaria y prueba de aceptación
+- Install dependencies: Se encarga de instalar todas las dependencias de nuestro proyecto; la ejecución de nuestro proyecto depende de estas, así que es mandatorio.
 
-**La aplicación:** es una calculadora web hecha en Flask. Tiene un formulario en `/` donde el usuario escribe dos números, elige una operación (sumar, restar, multiplicar, dividir) y la app devuelve el resultado en la misma página. La lógica matemática vive en `app/calculadora.py` y la capa web en `app/app.py`.
+- Black: Correr la dependencia de code formatting Black, formateando nuestro código con reglas estándar de Python para mantener código limpio.
 
-**Diferencia principal:** una **prueba unitaria** valida una pieza aislada del código (una función, un método) sin depender de infraestructura externa. Una **prueba de aceptación** valida el sistema completo funcionando de punta a punta, tal como lo usaría un usuario real, normalmente atravesando la red, la UI o varios componentes a la vez.
+- Pylint: Correr la dependencia de linter Pylint, detectando errores de sintaxis y ejecución. También, para asegurar la calidad del código.
 
-- **Ejemplo unitario:** probar directamente la función `dividir(10, 2)` y verificar que retorna `5.0`, o que `dividir(5, 0)` lanza `ZeroDivisionError`. No arranca ningún servidor, solo importa la función y la ejecuta.
-- **Ejemplo de aceptación:** levantar el servidor con Gunicorn, hacer una petición HTTP `POST /` con los campos `num1=10`, `num2=2`, `operacion=sumar`, y verificar que la respuesta HTML contiene `12`. Aquí se está probando que Flask, las rutas, los templates y la lógica hablan bien entre sí.
+- Flake8: Correr la dependencia de linter Flake8, haciendo algo parecido a Pylint, revisando la calidad del código contra los estándares PEP8.
 
-En el pipeline se reflejan esos dos tipos: primero corre `pytest` ignorando el archivo de aceptación, y después levanta Gunicorn y corre específicamente `tests/test_acceptance_app.py`.
+- Run Unit tests: Corre la dependencia de Pytest con coverage, encargándose de correr de manera automática todas nuestras pruebas, además de revisar el coverage sobre nuestro código. Este step es un blocker; si no pasa, nuestro artefacto no será desplegado.
 
----
+- Run acceptance tests: Corre nuestro servicio y la dependencia de Selenium para hacer pruebas de aceptación nativamente en la máquina del CI. Encargándose de asegurar que el flujo completo de cara al cliente esté funcionando de manera correcta. También son un bloqueador para nuestro CI.
 
-## 3. Steps principales del workflow
+- Upload Test Reports Artifacts: Sube los reportes HTML y de cobertura como artefactos del workflow, para poder revisarlos sin tener que volver a correr el pipeline.
 
-El workflow `.github/workflows/ci.yml` hace lo siguiente:
+- SonarCloud Scan: Envía el código y los reportes a SonarQube para medir calidad, code smells, duplicación y cobertura. Es un control adicional más allá de los linters locales.
 
-1. **`actions/checkout@v3`** — descarga el código del repo en el runner. Sin este paso el runner no tendría nada que compilar ni probar.
-2. **`Set up Python`** — instala Python 3.12 en el runner. Fija la versión para garantizar consistencia entre local y CI.
-3. **`Install dependencies`** — actualiza `pip` e instala todo lo listado en `requirements.txt` (Flask, Gunicorn, pytest, linters, etc.). Prepara el entorno para los pasos siguientes.
-4. **`Run Black`** — verifica el formato del código con `--check`. Si algo no cumple el estilo, falla el step. Así todos los commits mantienen el mismo estilo.
-5. **`Run Pylint`** — analiza la calidad del código y exige una nota mínima de 9. Deja el reporte en `pylint-report.txt` para que SonarQube lo use después.
-6. **`Run Flake8`** — linter adicional que detecta errores de estilo/bugs potenciales y genera `flake8-report.txt`.
-7. **`Run Unit Tests with pytest and Coverage`** — corre las pruebas unitarias (ignorando las de aceptación) y mide cobertura. Valida la lógica interna antes de probar el sistema completo.
-8. **`Run Acceptance Tests`** — arranca el servidor con Gunicorn en `0.0.0.0:8000`, espera 10 segundos a que suba, y lanza las pruebas de aceptación contra `http://localhost:8000`. Simula el uso real de la app.
-9. **`Upload Test Reports Artifacts`** — sube los reportes HTML y de cobertura como artefactos del workflow, para poder revisarlos sin tener que volver a correr el pipeline.
-10. **`SonarCloud Scan`** — envía el código y los reportes a SonarQube para medir calidad, code smells, duplicación y cobertura. Es un control adicional más allá de los linters locales.
-11. **`Set up QEMU` y `Set up Docker Buildx`** — preparan el runner para construir imágenes Docker multi-arquitectura. Solo corren en `push` a `main`.
-12. **`Login to Docker Hub`** — autentica el runner contra Docker Hub usando un token guardado como secreto. Sin esto no podría hacer `push` al registro.
-13. **`Build and push Docker image`** — construye la imagen usando el `Dockerfile` y la sube a Docker Hub con dos tags: el SHA del commit (para trazabilidad exacta) y `latest` (para referencia cómoda). Aprovecha caché GHA para acelerar builds siguientes.
+- QEMU y Docker Buildx: Preparan el runner para construir imágenes Docker multiarquitectura. Solo corren en push a main.
 
----
+- Login to Docker Hub: Autentica el runner contra Docker Hub usando nuestro token guardado como secreto. Sin esto no podría hacer push al registro.
 
-## 4. Problemas que encontré y cómo los solucioné
+- Build and push Docker image: Construye la imagen usando el Dockerfile y la sube a Docker Hub con dos tags: el SHA del commit y latest.
 
-Estos fueron los más representativos:
+Qué problemas o dificultades encontraste al implementar este taller? ¿Cómo los solucionaste? Si no encontraste ningún problema, describe algo nuevo que hayas aprendido.
 
-- **Pruebas de aceptación que no encontraban el servidor.** Al principio Gunicorn se quedaba escuchando en `127.0.0.1` y las pruebas fallaban intermitentemente. La solución fue bindearlo a `0.0.0.0:8000` y exportar `APP_BASE_URL=http://localhost:8000` como variable de entorno, para que el test y el servidor hablaran en la misma interfaz. También tuve que añadir un `sleep 10` para darle tiempo a Gunicorn de estar listo antes de disparar las requests.
+- En realidad, no tuvimos ningún problema por fuera de los que pasaban en el taller. Pero, haber aprendido de SonarQube nos pareció demasiado interesante, ya que es una herramienta que agrega demasiado valor a la forma en la que desarrollamos código, pudiendo reducir la cantidad de bugs que desplegamos y ayudándonos a no repetirlos nuevamente.
 
-- **Errores de SonarQube por duplicación y formato.** Los primeros escaneos salían con code smells y warnings que Black y Pylint no atrapaban localmente. Tocó refactorizar (por ejemplo, el diccionario `OPERACIONES` en `app.py` reemplazó una cadena de `if/elif`) y reformatear con Black hasta que Sonar quedara verde. De ahí aprendí que los linters locales son un mínimo, no un techo.
+¿Qué ventajas ofrece empaquetar la aplicación en una imagen Docker al final del pipeline en lugar de simplemente validar el código?
 
-- **Flake8 vs Black en longitud de línea.** Tuvieron choques de reglas (Black permite más caracteres que el default de Flake8). Lo resolví dejando que Flake8 no bloqueara el pipeline (`|| true`) mientras ajustaba los límites, y luego corrigiendo las líneas realmente problemáticas.
-
-- **Secretos y variables en GitHub Actions.** La primera vez que configuré el `docker/login-action` usé `${{ secrets.DOCKERHUB_USERNAME }}` cuando en realidad tenía el usuario como *variable* (`vars.DOCKERHUB_USERNAME`) y el token sí como *secret*. Entender la diferencia entre `secrets` y `vars` fue algo nuevo que me llevé del taller.
-
----
-
-## 5. Ventajas de empaquetar en una imagen Docker al final del pipeline
-
-Validar el código está muy bien, pero una imagen Docker da un salto cualitativo:
-
-- **Portabilidad real.** La imagen incluye Python 3.12, todas las dependencias y el código listo para correr con Gunicorn. Cualquiera con Docker instalado puede ejecutar `docker run` y tener la app funcionando, sin instalar nada más ni lidiar con versiones.
-- **Entorno idéntico en dev, CI y producción.** El mismo artefacto que pasó las pruebas es el que se despliega. Se elimina la brecha entre "el código compila" y "el código corre en el servidor".
-- **Versionado y trazabilidad.** Al taggear la imagen con el SHA del commit (`:${{ github.sha }}`), cada build es identificable y reversible: si una versión rompe algo, se puede volver a una imagen anterior en segundos.
-- **Despliegue listo, no solo código validado.** Sin Docker, el pipeline solo garantiza que el código pasa los tests; con Docker, el pipeline entrega un producto desplegable. La CI se convierte en CD.
-- **Aislamiento y seguridad.** El contenedor corre con sus propias dependencias, sin contaminar ni depender del host. Si mañana cambio la versión de Python, no afecta a otros servicios en el mismo servidor.
-
-En resumen: validar el código responde "¿está bien escrito?"; empaquetarlo en Docker responde "¿está listo para que cualquiera lo use?".
+- Poder entregar un artefacto validado y probado, el cual puede ser desplegado en la etapa de CD. Asegurando robustez y seguridad.
+- Poder versionar y asegurar trazabilidad del artefacto de manera automática. Lo cual nos facilita mucho acciones posteriores en el CD.
