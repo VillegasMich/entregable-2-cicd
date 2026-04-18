@@ -1,0 +1,94 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest  # Usamos Ubuntu
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: '3.12' # Reemplaza con tu versión de Python
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Black (Formatter)
+        run: black app --check  # --check solo verifica, no modifica
+
+      - name: Run Pylint (Linter)
+        run: pylint app --output-format=text --fail-under=9 > pylint-report.txt || true
+
+      - name: Run Flake8 (Linter)
+        run: flake8 app --output-file=flake8-report.txt || true
+
+      - name: Run Unit Tests with pytest and Coverage
+        run: |
+          pytest --ignore=tests/test_acceptance_app.py  # Genera un informe XML para SonarCloud
+
+      - name: Run Acceptance Tests
+        env:
+           APP_BASE_URL: http://localhost:8000
+        run: |
+          gunicorn --workers=2 --bind=0.0.0.0:8000 app.app:app &
+          sleep 10
+          pytest tests/test_acceptance_app.py --cov-report=xml:acceptance_coverage.xml --html=acceptance_report.html # Genera un informe XML con otro nombre, para no sobre-escribir el anterior de  las pruebas unitarias
+
+      - name: Upload Test Reports Artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports
+          path: |
+            htmlcov/
+            report.html
+        
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@v5.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Automáticamente proporcionado
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}    # El secreto que creaste
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }} # La variable que configuraste
+    
+      # --- Pasos de Docker ---
+
+      - name: Set up QEMU
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ vars.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}:${{ github.sha }}
+            ${{ vars.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

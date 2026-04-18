@@ -1,0 +1,22 @@
+# .dockerignore
+.git
+.gitignore
+.dockerignore
+Dockerfile
+README.md
+venv
+env
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+htmlcov
+coverage.xml
+report.html
+acceptance_coverage.xml
+.vscode
+*.md
+Entregable2-images
+sonar-project.properties
+pytest.ini
